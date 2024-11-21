@@ -1,4 +1,4 @@
-set_languages( "c17" )
+set_languages( "cxx20" )
 set_symbols( "debug" );
 
 add_rules("plugin.vsxmake.autoupdate")
