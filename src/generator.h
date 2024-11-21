@@ -40,7 +40,7 @@ namespace j2s
 		void dumpStructs( FILE* _pOutFile );
 
 	private:
-
+		void sortObjectKeys();
 		void resolveObject( const std::string& _key, nlohmann::json& _json, int _depth );
 
 		void dumpStructObject( FILE* _pOutFile, const std::string& _key, memberVarList_t& _members );
@@ -51,6 +51,9 @@ namespace j2s
 		void generateStructs( const std::string& _key, nlohmann::json& _json, int _depth );
 
 		std::vector<std::string> m_objectKeys;
+		std::vector<std::string> m_sortedObjectKeys;
+		std::unordered_map<std::string, std::vector<std::string>> m_objectReferences;
+
 		std::unordered_map<std::string, sObject> m_objects;
 		std::unordered_map<std::string, std::vector<std::string>> m_variants;
 		

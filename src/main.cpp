@@ -41,7 +41,7 @@ int main( int argc, char* argv[] )
 		std::string jsonSrc = loadFile( path );
 		nlohmann::json json = nlohmann::json::parse( jsonSrc );
 
-		root_t root = json.get<root_t>();
+		//root_t root = json.get<root_t>();
 		printf( "test\n" );
 	}
 
