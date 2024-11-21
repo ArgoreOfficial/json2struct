@@ -44,11 +44,13 @@ namespace j2s
 		void resolveObject( const std::string& _key, nlohmann::json& _json, int _depth );
 
 		void dumpStructObject( FILE* _pOutFile, const std::string& _key, memberVarList_t& _members );
+		void dumpVariantContainer( FILE* _pOutFile, const std::string& _key, sObject& _object );
 
 		std::string loadFile( const char* _path );
 		std::string typenameToCppType( const std::string& _key, nlohmann::json& _json );
 		void generateStructs( const std::string& _key, nlohmann::json& _json, int _depth );
 
+		std::vector<std::string> m_objectKeys;
 		std::unordered_map<std::string, sObject> m_objects;
 		std::unordered_map<std::string, std::vector<std::string>> m_variants;
 		

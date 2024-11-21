@@ -4,6 +4,8 @@
 #include <sstream>
 #include <algorithm>
 
+// #define ENABLE_NLOHMANN_INLINE
+
 void j2s::cGenerator::load( const char* _filepath )
 {
 	std::string fileSrc = loadFile( _filepath );
@@ -21,16 +23,19 @@ void j2s::cGenerator::dumpStructs( FILE* _pOutFile )
 			 "#include <stdint.h>\n"
 			 "#include <string>\n"
 			 "#include <vector>\n"
+		 #ifdef ENABLE_NLOHMANN_INLINE
 			 "#ifdef ENABLE_NLOHMANN_INLINE\n"
 			 "#include <nlohmann/json.hpp>\n"
 			 "#endif\n"
+		 #endif
 			 "\n"
 	);
 
-	for ( auto& pair : m_objects )
+	//m_objectKeys
+	for ( auto keyIter = m_objectKeys.rbegin(); keyIter != m_objectKeys.rend(); ++keyIter )
 	{
-		std::string objName = pair.first;
-		sObject& obj = pair.second;
+		std::string objName = *keyIter;
+		sObject& obj = m_objects[ objName ];
 
 		switch ( obj.type )
 		{
@@ -39,29 +44,8 @@ void j2s::cGenerator::dumpStructs( FILE* _pOutFile )
 			break;
 
 		case kVariantContainer:
-		{
-			std::vector<std::string> variants;
-
-			fprintf( _pOutFile, "struct %s // variant container \n{ \n", objName.c_str() );
-			for ( auto& m : obj.members )
-			{
-				fprintf( _pOutFile, "    %s %s;\n", m.typeStr.c_str(), m.name.c_str() );
-				if ( m_objects.contains( m.typeStr ) )
-					variants.push_back( m.typeStr );
-			}
-			fprintf( _pOutFile, "};\n" );
-
-			for ( auto& variantType : variants )
-			{
-				fprintf( _pOutFile, "union %s {\n", variantType.c_str() );
-
-				sObject& variantBase = m_objects[ variantType ];
-				for ( auto& variant : variantBase.variantMembers )
-					fprintf( _pOutFile, "   %s_t %s;\n", variant.first.c_str(), variant.first.c_str() );
-				
-				fprintf( _pOutFile, "};\n\n");
-			}
-		} break;
+			dumpVariantContainer( _pOutFile, objName, obj );
+			break;
 
 		case kVariant:
 		{
@@ -100,8 +84,11 @@ void j2s::cGenerator::resolveObject( const std::string& _key, nlohmann::json& _j
 
 		bool firstTime = obj.members.empty();
 
-		if( firstTime )
+		if ( firstTime )
+		{
 			printf( "%s%s\n", spacer.c_str(), objTypeStr.c_str() );
+			m_objectKeys.push_back( objTypeStr );
+		}
 		
 		for ( auto& el : _json.items() )
 		{
@@ -143,6 +130,8 @@ void j2s::cGenerator::resolveObject( const std::string& _key, nlohmann::json& _j
 				printf( "%s%s %s;\n", subspacer.c_str(), typeStr.c_str(), keyStr.c_str() );
 				obj.variantMembers[ obj.variantType ].push_back( { typeStr, keyStr, el.key() } );
 			}
+
+			m_objectKeys.push_back( objTypeStr );
 		}
 	}
 	else if( m_objects.find( objTypeStr ) == m_objects.end() )
@@ -163,6 +152,7 @@ void j2s::cGenerator::resolveObject( const std::string& _key, nlohmann::json& _j
 			obj.members.push_back( { typeStr, keyStr, el.key() } );
 		}
 
+		m_objectKeys.push_back( objTypeStr );
 		m_objects[ objTypeStr ] = obj;
 	}
 }
@@ -175,6 +165,7 @@ void j2s::cGenerator::dumpStructObject( FILE* _pOutFile, const std::string& _key
 		fprintf( _pOutFile, "    %s %s;\n", m.typeStr.c_str(), m.name.c_str() );
 	fprintf( _pOutFile, "};\n" );
 
+#ifdef ENABLE_NLOHMANN_INLINE
 	// inline nlohmann::json 
 	fprintf( _pOutFile, "#ifdef ENABLE_NLOHMANN_INLINE\n" );
 
@@ -192,11 +183,69 @@ void j2s::cGenerator::dumpStructObject( FILE* _pOutFile, const std::string& _key
 		const char* jname = m.jsonName.c_str();
 		const char* typ = m.typeStr.c_str();
 		//fprintf( _pOutFile, "    if( _json.contains(\"%s\") && _json.at(\"%s\").type() != nlohmann::detail::value_t::null ) ", jname, jname );
-		fprintf( _pOutFile, "_obj.%s = _json.value<%s>(\"%s\", %s{} );\n", name, typ, jname, typ );
+		fprintf( _pOutFile, "    _obj.%s = _json.value<%s>(\"%s\", %s{} );\n", name, typ, jname, typ );
 	}
 	fprintf( _pOutFile, "}\n" );
 
 	fprintf( _pOutFile, "#endif\n\n" );
+#endif
+}
+
+void j2s::cGenerator::dumpVariantContainer( FILE* _pOutFile, const std::string& _key, sObject& _obj )
+{
+	std::vector<std::string> variants;
+
+	fprintf( _pOutFile, "struct %s // variant container \n{ \n", _key.c_str() );
+	for ( auto& m : _obj.members )
+	{
+		if ( m_objects.contains( m.typeStr ) )
+		{
+			variants.push_back( m.typeStr );
+
+			fprintf( _pOutFile, "    union %s {\n", m.typeStr.c_str() );
+
+			sObject& variantBase = m_objects[ m.typeStr ];
+			for ( auto& variant : variantBase.variantMembers )
+				fprintf( _pOutFile, "       %s_t %s;\n", variant.first.c_str(), variant.first.c_str() );
+
+			fprintf( _pOutFile, "    } %s;\n", m.name.c_str() );
+		}
+		else
+			fprintf( _pOutFile, "    %s %s;\n", m.typeStr.c_str(), m.name.c_str() );
+	}
+	fprintf( _pOutFile, "};\n" );
+
+
+#ifdef ENABLE_NLOHMANN_INLINE
+	fprintf( _pOutFile, "#ifdef ENABLE_NLOHMANN_INLINE\n" );
+	// variants
+	for ( auto& variantStr : variants )
+	{
+		sObject& variantBase = m_objects[ variantStr ];
+
+		fprintf( _pOutFile, "inline void from_json(const nlohmann::json& _json, %s& _obj) {\n", variantStr.c_str() );
+		for ( auto& variant : variantBase.variantMembers )
+		{
+			fprintf( _pOutFile, "    if ( _obj.type == \"%s\" ) { from_json( _json, _obj.%s ); return; }\n", variant.first.c_str(), variant.first.c_str() );
+
+			//fprintf( _pOutFile, "       %s_t %s;\n", variant.first.c_str(), variant.first.c_str() );
+
+		}
+		fprintf( _pOutFile, "}\n" );
+	}
+	
+	fprintf( _pOutFile, "inline void from_json(const nlohmann::json& _json, %s& _obj) {\n", _key.c_str() );
+	for ( auto& m : _obj.members )
+	{
+		const char* name = m.name.c_str();
+		const char* jname = m.jsonName.c_str();
+		const char* typ = m.typeStr.c_str();
+		//fprintf( _pOutFile, "    if( _json.contains(\"%s\") && _json.at(\"%s\").type() != nlohmann::detail::value_t::null ) ", jname, jname );
+		fprintf( _pOutFile, "    _obj.%s = _json.value<%s>(\"%s\", %s{} );\n", name, typ, jname, typ );
+	}
+	fprintf( _pOutFile, "}\n" );
+	fprintf( _pOutFile, "#endif\n\n" );
+#endif
 }
 
 std::string j2s::cGenerator::loadFile( const char* _path )
