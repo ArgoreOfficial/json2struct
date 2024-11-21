@@ -19,32 +19,31 @@ int main( int argc, char* argv[] )
 {
 	char* path = (char*)"./test.blueprint";
 
-	bool generate = true;
-
 	if ( argc > 1 )
 		path = argv[ 1 ];
 
-	if( generate )
-	{
-		j2s::cGenerator generator;
-		generator.load( path );
+#ifdef _GENERATED_H
+	std::string jsonSrc = loadFile( path );
+	nlohmann::json json = nlohmann::json::parse( jsonSrc );
 
-		FILE* pOutFile = fopen( "./generated.h", "w" );
+	root_t root = json.get<root_t>();
 
-		generator.generate();
-		generator.dumpStructs( pOutFile );
+	FILE* pOutFile = fopen( "generated.json", "w" );
+	std::string dump = json.dump();
+	fwrite( dump.c_str(), sizeof( char ), dump.size(), pOutFile );
 
-		fclose( pOutFile );
-	}
-	else
-	{
-		std::string jsonSrc = loadFile( path );
-		nlohmann::json json = nlohmann::json::parse( jsonSrc );
+	printf( "" );
+#else
+	j2s::cGenerator generator;
+	generator.load( path );
 
-		//root_t root = json.get<root_t>();
-		printf( "test\n" );
-	}
+	FILE* pOutFile = fopen( "../src/generated.h", "w" );
 
+	generator.generate();
+	generator.dumpStructs( pOutFile );
+
+	fclose( pOutFile );
+#endif
 
 	return 0;
 }
